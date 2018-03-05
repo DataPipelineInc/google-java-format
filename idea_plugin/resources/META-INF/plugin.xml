@@ -16,7 +16,7 @@
       google-java-format 1.4.
     ]]></description>
 
-  <idea-version since-build="172"/>
+  <idea-version since-build="181"/>
 
   <project-components>
     <component>

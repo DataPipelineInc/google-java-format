@@ -45,8 +45,8 @@ intellij {
 patchPluginXml {
   pluginDescription = "Formats source code using the google-java-format tool. This version of " +
                       "the plugin uses version ${googleJavaFormatVersion} of the tool." + googleJavaFormatVersion
-  version = "${googleJavaFormatVersion}.1.171"
-  sinceBuild = '171'
+  version = "${googleJavaFormatVersion}.1.181"
+  sinceBuild = '181'
 }
 
 publishPlugin {

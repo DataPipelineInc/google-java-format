@@ -1,7 +1,7 @@
 <idea-plugin url="https://github.com/google/google-java-format/tree/master/idea_plugin">
   <id>google-java-format</id>
   <name>google-java-format</name>
-  <version>1.4.0.172</version>
+  <version>1.4.0.183</version>
   <vendor url="https://github.com/google/google-java-format">
     Google
   </vendor>
@@ -16,7 +16,7 @@
       google-java-format 1.4.
     ]]></description>
 
-  <idea-version since-build="182"/>
+  <idea-version since-build="183" until-build="183.*"/>
 
   <project-components>
     <component>

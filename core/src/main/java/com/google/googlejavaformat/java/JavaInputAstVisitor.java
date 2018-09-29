@@ -43,15 +43,18 @@ import static org.openjdk.source.tree.Tree.Kind.UNION_TYPE;
 import static org.openjdk.source.tree.Tree.Kind.VARIABLE;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Optional;
+import com.google.common.base.Predicate;
 import com.google.common.base.Throwables;
 import com.google.common.base.Verify;
 import com.google.common.collect.HashMultiset;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Multiset;
 import com.google.common.collect.PeekingIterator;
+import com.google.common.collect.Streams;
 import com.google.googlejavaformat.CloseOp;
 import com.google.googlejavaformat.Doc;
 import com.google.googlejavaformat.Doc.FillMode;
@@ -67,11 +70,16 @@ import com.google.googlejavaformat.java.DimensionHelpers.SortedDims;
 import com.google.googlejavaformat.java.DimensionHelpers.TypeWithDims;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import javax.annotation.Nullable;
 import org.openjdk.javax.lang.model.element.Name;
 import org.openjdk.source.tree.AnnotatedTypeTree;
@@ -406,7 +414,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
     visitAndBreakModifiers(
         node.getModifiers(),
         Direction.VERTICAL,
-        /* declarationAnnotationBreak= */ Optional.absent());
+        /* declarationAnnotationBreak= */ Optional.empty());
     builder.open(ZERO);
     token("@");
     token("interface");
@@ -667,7 +675,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
     if (node.getClassBody() != null) {
       builder.addAll(
           visitModifiers(
-              node.getClassBody().getModifiers(), Direction.HORIZONTAL, Optional.absent()));
+              node.getClassBody().getModifiers(), Direction.HORIZONTAL, Optional.empty()));
     }
     scan(node.getIdentifier(), null);
     addArguments(node.getArguments(), plusFour);
@@ -754,7 +762,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
         node.getVariable(),
         Optional.of(node.getExpression()),
         ":",
-        /* trailing= */ Optional.absent());
+        /* trailing= */ Optional.empty());
     builder.close();
     token(")");
     builder.close();
@@ -791,7 +799,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
     visitAndBreakModifiers(
         node.getModifiers(),
         Direction.VERTICAL,
-        /* declarationAnnotationBreak= */ Optional.absent());
+        /* declarationAnnotationBreak= */ Optional.empty());
     builder.open(plusFour);
     token("enum");
     builder.breakOp(" ");
@@ -833,10 +841,24 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
       members.add(member);
     }
     if (enumConstants.isEmpty() && members.isEmpty()) {
-      builder.open(ZERO);
-      builder.blankLineWanted(BlankLineWanted.NO);
-      token("}");
-      builder.close();
+      if (builder.peekToken().equals(Optional.of(";"))) {
+        builder.open(plusTwo);
+        builder.forcedBreak();
+        token(";");
+        builder.forcedBreak();
+        dropEmptyDeclarations();
+        builder.close();
+        builder.open(ZERO);
+        builder.forcedBreak();
+        builder.blankLineWanted(BlankLineWanted.NO);
+        token("}", plusTwo);
+        builder.close();
+      } else {
+        builder.open(ZERO);
+        builder.blankLineWanted(BlankLineWanted.NO);
+        token("}");
+        builder.close();
+      }
     } else {
       builder.open(plusTwo);
       builder.blankLineWanted(BlankLineWanted.NO);
@@ -853,7 +875,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
         visitEnumConstantDeclaration(enumConstant);
         first = false;
       }
-      if (builder.peekToken().or("").equals(",")) {
+      if (builder.peekToken().orElse("").equals(",")) {
         token(",");
         builder.forcedBreak(); // The ";" goes on its own line.
       }
@@ -928,15 +950,13 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
           annotationDirection,
           Optional.of(fragment.getModifiers()),
           fragment.getType(),
-          VarArgsOrNot.fromVariable(fragment),
-          /* varargsAnnotations= */ ImmutableList.of(),
-          fragment.getName(),
+          /* name= */ fragment.getName(),
           "",
           "=",
-          Optional.fromNullable(fragment.getInitializer()),
+          Optional.ofNullable(fragment.getInitializer()),
           Optional.of(";"),
-          /* receiverExpression= */ Optional.absent(),
-          Optional.fromNullable(variableFragmentDims(true, 0, fragment.getType())));
+          /* receiverExpression= */ Optional.empty(),
+          Optional.ofNullable(variableFragmentDims(true, 0, fragment.getType())));
 
     } else {
       declareMany(fragments, annotationDirection);
@@ -1225,7 +1245,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
     token("@");
     scan(node.getAnnotationType(), null);
     if (!node.getArguments().isEmpty()) {
-      builder.open(plusTwo);
+      builder.open(plusFour);
       token("(");
       builder.breakOp();
       boolean first = true;
@@ -1250,9 +1270,8 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
         }
         first = false;
       }
-      builder.breakOp(UNIFIED, "", minusTwo, /* optionalTag= */ Optional.absent());
+      token(")");
       builder.close();
-      token(")", plusTwo);
       builder.close();
       return null;
 
@@ -1327,7 +1346,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
     }
     builder.addAll(
         visitModifiers(
-            annotations, Direction.VERTICAL, /* declarationAnnotationBreak= */ Optional.absent()));
+            annotations, Direction.VERTICAL, /* declarationAnnotationBreak= */ Optional.empty()));
 
     Tree baseReturnType = null;
     Deque<List<AnnotationTree>> dims = null;
@@ -1397,7 +1416,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
       if (!node.getParameters().isEmpty() || node.getReceiverParameter() != null) {
         // Break before args.
         builder.breakToFill("");
-        visitFormals(Optional.fromNullable(node.getReceiverParameter()), node.getParameters());
+        visitFormals(Optional.ofNullable(node.getReceiverParameter()), node.getParameters());
       }
       token(")");
       if (dims != null) {
@@ -1468,10 +1487,83 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
   @Override
   public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
     sync(node);
+    if (handleLogStatement(node)) {
+      return null;
+    }
     visitDot(node);
     return null;
   }
 
+  /**
+   * Special-cases log statements, to output:
+   *
+   * <pre>{@code
+   * logger.atInfo().log(
+   *     "Number of foos: %d, foos.size());
+   * }</pre>
+   *
+   * <p>Instead of:
+   *
+   * <pre>{@code
+   * logger
+   *     .atInfo()
+   *     .log(
+   *         "Number of foos: %d, foos.size());
+   * }</pre>
+   */
+  private boolean handleLogStatement(MethodInvocationTree node) {
+    if (!getMethodName(node).contentEquals("log")) {
+      return false;
+    }
+    Deque<ExpressionTree> parts = new ArrayDeque<>();
+    ExpressionTree curr = node;
+    while (curr instanceof MethodInvocationTree) {
+      MethodInvocationTree method = (MethodInvocationTree) curr;
+      parts.addFirst(method);
+      if (!LOG_METHODS.contains(getMethodName(method).toString())) {
+        return false;
+      }
+      curr = Trees.getMethodReceiver(method);
+    }
+    if (!(curr instanceof IdentifierTree)) {
+      return false;
+    }
+    parts.addFirst(curr);
+    visitDotWithPrefix(ImmutableList.copyOf(parts), false, ImmutableList.of(parts.size() - 1));
+    return true;
+  }
+
+  static final ImmutableSet<String> LOG_METHODS =
+      ImmutableSet.of(
+          "at",
+          "atConfig",
+          "atFine",
+          "atFiner",
+          "atFinest",
+          "atInfo",
+          "atMostEvery",
+          "atSevere",
+          "atWarning",
+          "every",
+          "log",
+          "logVarargs",
+          "perUnique",
+          "withCause",
+          "withStackTrace");
+
+  private static Optional<Long> handleStream(List<ExpressionTree> parts) {
+    return indexIn(
+        parts.stream(),
+        p ->
+            (p instanceof MethodInvocationTree)
+                && getMethodName((MethodInvocationTree) p).contentEquals("stream"));
+  }
+
+  private static <T> Optional<Long> indexIn(Stream<T> stream, Predicate<T> predicate) {
+    return Streams.mapWithIndex(stream, (x, i) -> predicate.apply(x) ? i : -1)
+        .filter(x -> x != -1)
+        .findFirst();
+  }
 
   @Override
   public Void visitMemberSelect(MemberSelectTree node, Void unused) {
@@ -1765,15 +1857,13 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
               fieldAnnotationDirection(variableTree.getModifiers()),
               Optional.of(variableTree.getModifiers()),
               variableTree.getType(),
-              VarArgsOrNot.NO,
-              /* varargsAnnotations= */ ImmutableList.of(),
-              variableTree.getName(),
+              /* name= */ variableTree.getName(),
               "",
               "=",
-              Optional.fromNullable(variableTree.getInitializer()),
-              /* trailing= */ Optional.absent(),
-              /* receiverExpression= */ Optional.absent(),
-              /* typeWithDims= */ Optional.absent());
+              Optional.ofNullable(variableTree.getInitializer()),
+              /* trailing= */ Optional.empty(),
+              /* receiverExpression= */ Optional.empty(),
+              /* typeWithDims= */ Optional.empty());
         } else {
           // TODO(cushon): think harder about what to do with `try (resource1; resource2) {}`
           scan(resource, null);
@@ -1825,7 +1915,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
         visitModifiers(
             node.getModifiers(),
             Direction.VERTICAL,
-            /* declarationAnnotationBreak= */ Optional.absent());
+            /* declarationAnnotationBreak= */ Optional.empty());
     boolean hasSuperclassType = node.getExtendsClause() != null;
     boolean hasSuperInterfaceTypes = !node.getImplementsClause().isEmpty();
     builder.addAll(breaks);
@@ -2114,7 +2204,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
     first = true;
     while (nextIsModifier() || !annotations.isEmpty()) {
       if (!first) {
-        builder.addAll(breakFillList(Optional.absent()));
+        builder.addAll(breakFillList(Optional.empty()));
       }
       if (nextIsModifier()) {
         token(builder.peekToken().get());
@@ -2125,7 +2215,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
       first = false;
     }
     builder.close();
-    return breakFillList(Optional.absent());
+    return breakFillList(Optional.empty());
   }
 
   boolean nextIsModifier() {
@@ -2188,7 +2278,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
     visitAndBreakModifiers(
         declaration.getModifiers(),
         Direction.HORIZONTAL,
-        /* declarationAnnotationBreak= */ Optional.absent());
+        /* declarationAnnotationBreak= */ Optional.empty());
     List<? extends Tree> union = type.getTypeAlternatives();
     boolean first = true;
     for (int i = 0; i < union.size() - 1; i++) {
@@ -2208,17 +2298,15 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
     declareOne(
         DeclarationKind.NONE,
         Direction.HORIZONTAL,
-        /* modifiers= */ Optional.absent(),
+        /* modifiers= */ Optional.empty(),
         last,
-        VarArgsOrNot.NO,
-        /* varargsAnnotations= */ ImmutableList.of(),
-        declaration.getName(),
+        /* name= */ declaration.getName(),
         /* op= */ "",
         "=",
-        Optional.fromNullable(declaration.getInitializer()),
-        /* trailing= */ Optional.absent(),
-        /* receiverExpression= */ Optional.absent(),
-        /* typeWithDims= */ Optional.absent());
+        Optional.ofNullable(declaration.getInitializer()),
+        /* trailing= */ Optional.empty(),
+        /* receiverExpression= */ Optional.empty(),
+        /* typeWithDims= */ Optional.empty());
     builder.close();
   }
 
@@ -2256,15 +2344,13 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
           Direction.HORIZONTAL,
           Optional.of(receiver.get().getModifiers()),
           receiver.get().getType(),
-          VarArgsOrNot.NO,
-          /* varargsAnnotations= */ ImmutableList.of(),
-          receiver.get().getName(),
+          /* name= */ receiver.get().getName(),
           "",
           "",
-          /* initializer= */ Optional.absent(),
-          !parameters.isEmpty() ? Optional.of(",") : Optional.absent(),
+          /* initializer= */ Optional.empty(),
+          !parameters.isEmpty() ? Optional.of(",") : Optional.empty(),
           Optional.of(receiver.get().getNameExpression()),
-          /* typeWithDims= */ Optional.absent());
+          /* typeWithDims= */ Optional.empty());
       first = false;
     }
     for (int i = 0; i < parameters.size(); i++) {
@@ -2276,9 +2362,9 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
           DeclarationKind.PARAMETER,
           Direction.HORIZONTAL,
           parameter,
-          /* initializer= */ Optional.absent(),
+          /* initializer= */ Optional.empty(),
           "=",
-          i < parameters.size() - 1 ? Optional.of(",") : /* a= */ Optional.absent());
+          i < parameters.size() - 1 ? Optional.of(",") : /* a= */ Optional.empty());
       first = false;
     }
     builder.close();
@@ -2328,11 +2414,11 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
       builder.open(plusTwo);
       token("{");
       builder.forcedBreak();
-      Optional<Tree.Kind> previousDirective = Optional.absent();
+      Optional<Tree.Kind> previousDirective = Optional.empty();
       for (DirectiveTree directiveTree : node.getDirectives()) {
         markForPartialFormat();
         builder.blankLineWanted(
-            previousDirective.transform(k -> !k.equals(directiveTree.getKind())).or(false)
+            previousDirective.map(k -> !k.equals(directiveTree.getKind())).orElse(false)
                 ? BlankLineWanted.YES
                 : BlankLineWanted.NO);
         builder.forcedBreak();
@@ -2447,23 +2533,18 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
       String equals,
       Optional<String> trailing) {
     sync(node);
-    boolean varargs = VarArgsOrNot.fromVariable(node).isYes();
-    List<? extends AnnotationTree> varargsAnnotations = ImmutableList.of();
-    Tree type = node.getType();
     declareOne(
         kind,
         annotationsDirection,
         Optional.of(node.getModifiers()),
-        type,
-        VarArgsOrNot.valueOf(varargs),
-        varargsAnnotations,
+        node.getType(),
         node.getName(),
         "",
         equals,
         initializer,
         trailing,
-        /* receiverExpression= */ Optional.absent(),
-        /* typeWithDims= */ Optional.absent());
+        /* receiverExpression= */ Optional.empty(),
+        /* typeWithDims= */ Optional.empty());
   }
 
   /** Does not omit the leading '<', which should be associated with the type name. */
@@ -2549,9 +2630,11 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
       }
     }
 
+    Set<Integer> prefixes = new LinkedHashSet<>();
+
     // Check if the dot chain has a prefix that looks like a type name, so we can
     // treat the type name-shaped part as a single syntactic unit.
-    int prefixIndex = TypeNameClassifier.typePrefixLength(simpleNames(stack));
+    TypeNameClassifier.typePrefixLength(simpleNames(stack)).ifPresent(prefixes::add);
 
     int invocationCount = 0;
     int firstInvocationIndex = -1;
@@ -2587,23 +2670,25 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
     // myField
     //     .foo();
     //
-    if (invocationCount == 1) {
-      prefixIndex = firstInvocationIndex;
+    if (invocationCount == 1 && firstInvocationIndex > 0) {
+      prefixes.add(firstInvocationIndex);
     }
 
-    if (prefixIndex == -1 && items.get(0) instanceof IdentifierTree) {
+    if (prefixes.isEmpty() && items.get(0) instanceof IdentifierTree) {
       switch (((IdentifierTree) items.get(0)).getName().toString()) {
         case "this":
         case "super":
-          prefixIndex = 1;
+          prefixes.add(1);
           break;
         default:
           break;
       }
     }
 
-    if (prefixIndex > 0) {
-      visitDotWithPrefix(items, needDot, prefixIndex);
+    handleStream(items).ifPresent(x -> prefixes.add(x.intValue()));
+
+    if (!prefixes.isEmpty()) {
+      visitDotWithPrefix(items, needDot, prefixes);
     } else {
       visitRegularDot(items, needDot);
     }
@@ -2695,21 +2780,26 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
    *
    * @param items in the chain
    * @param needDot whether a leading dot is needed
-   * @param prefixIndex the index of the last item in the prefix
+   * @param prefixes the terminal indices of 'prefixes' of the expression that should be treated as
+   *     a syntactic unit
    */
-  private void visitDotWithPrefix(List<ExpressionTree> items, boolean needDot, int prefixIndex) {
+  private void visitDotWithPrefix(
+      List<ExpressionTree> items, boolean needDot, Collection<Integer> prefixes) {
     // Are there method invocations or field accesses after the prefix?
-    boolean trailingDereferences = prefixIndex >= 0 && prefixIndex < items.size() - 1;
+    boolean trailingDereferences = !prefixes.isEmpty() && getLast(prefixes) < items.size() - 1;
 
     builder.open(plusFour);
-    builder.open(trailingDereferences ? ZERO : ZERO);
+    for (int times = 0; times < prefixes.size(); times++) {
+      builder.open(ZERO);
+    }
 
+    Deque<Integer> unconsumedPrefixes = new ArrayDeque<>(ImmutableSortedSet.copyOf(prefixes));
     BreakTag nameTag = genSym();
     for (int i = 0; i < items.size(); i++) {
       ExpressionTree e = items.get(i);
       if (needDot) {
         FillMode fillMode;
-        if (prefixIndex >= 0 && i <= prefixIndex) {
+        if (!unconsumedPrefixes.isEmpty() && i <= unconsumedPrefixes.peekFirst()) {
           fillMode = FillMode.INDEPENDENT;
         } else {
           fillMode = FillMode.UNIFIED;
@@ -2720,8 +2810,9 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
       }
       BreakTag tyargTag = genSym();
       dotExpressionUpToArgs(e, Optional.of(tyargTag));
-      if (prefixIndex >= 0 && i == prefixIndex) {
+      if (!unconsumedPrefixes.isEmpty() && i == unconsumedPrefixes.peekFirst()) {
         builder.close();
+        unconsumedPrefixes.removeFirst();
       }
 
       Indent tyargIndent = Indent.If.make(tyargTag, plusFour, ZERO);
@@ -3110,8 +3201,6 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
       Direction annotationsDirection,
       Optional<ModifiersTree> modifiers,
       Tree type,
-      VarArgsOrNot isVarargs,
-      List<? extends AnnotationTree> varargsAnnotations,
       Name name,
       String op,
       String equals,
@@ -3162,10 +3251,6 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
               baseDims = totalDims - dims.size();
             } else {
               scan(type, null);
-            }
-            if (isVarargs.isYes()) {
-              visitAnnotations(varargsAnnotations, BreakOrNot.YES, BreakOrNot.YES);
-              builder.op("...");
             }
           }
           builder.close();
@@ -3269,6 +3354,18 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
           token("]");
           lastWasAnnotation = false;
           break;
+        case ".":
+          if (!builder.peekToken().get().equals(".") || !builder.peekToken(1).get().equals(".")) {
+            return;
+          }
+          if (lastWasAnnotation) {
+            builder.breakToFill(" ");
+          } else {
+            builder.breakToFill();
+          }
+          builder.op("...");
+          lastWasAnnotation = false;
+          break;
         default:
           return;
       }
@@ -3282,7 +3379,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
     Tree type = fragments.get(0).getType();
 
     visitAndBreakModifiers(
-        modifiers, annotationDirection, /* declarationAnnotationBreak= */ Optional.absent());
+        modifiers, annotationDirection, /* declarationAnnotationBreak= */ Optional.empty());
     builder.open(plusFour);
     builder.open(ZERO);
     TypeWithDims extractedDims = DimensionHelpers.extractDims(type, SortedDims.YES);
@@ -3418,7 +3515,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
   }
 
   private static Optional<? extends Input.Token> getNextToken(Input input, int position) {
-    return Optional.fromNullable(input.getPositionTokenMap().get(position));
+    return Optional.ofNullable(input.getPositionTokenMap().get(position));
   }
 
   /** Does this list of trees end with the specified token? */
@@ -3474,7 +3571,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
         token,
         Doc.Token.RealOrImaginary.REAL,
         ZERO,
-        /* breakAndIndentTrailingComment= */ Optional.absent());
+        /* breakAndIndentTrailingComment= */ Optional.empty());
   }
 
   /**
@@ -3488,7 +3585,7 @@ public final class JavaInputAstVisitor extends TreePathScanner<Void, Void> {
         token,
         Doc.Token.RealOrImaginary.REAL,
         plusIndentCommentsBefore,
-        /* breakAndIndentTrailingComment= */ Optional.absent());
+        /* breakAndIndentTrailingComment= */ Optional.empty());
   }
 
   /** Emit a {@link Doc.Token}, and breaks and indents trailing javadoc or block comments. */

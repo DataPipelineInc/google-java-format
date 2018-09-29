@@ -1,0 +1,37 @@
+<idea-plugin url="https://github.com/google/google-java-format/tree/master/idea_plugin">
+  <version>1.6.1</version>
+  <description>Formats source code using the google-java-format tool. This version of the plugin uses version 1.6 of the tool.</description>
+  <idea-version since-build="183" until-build="182.*"/>
+  <id>google-java-format</id>
+  <name>google-java-format</name>
+  <vendor url="https://github.com/google/google-java-format">
+    Google
+  </vendor>
+  <depends>com.intellij.modules.lang</depends>
+  <change-notes>
+    &lt;dl&gt;
+      &lt;dt&gt;1.6.1&lt;/dt&gt;
+      &lt;dd&gt;Reverted the default to disabled. A notification will be presented the first time you
+        open a project asking if you want to enable google-java-format for that project.&lt;/dd&gt;
+      &lt;dt&gt;1.6.0&lt;/dt&gt;
+      &lt;dd&gt;Upgraded to google-java-format 1.6. Enabled the plugin by default.&lt;/dd&gt;
+    &lt;/dl&gt;
+  </change-notes>
+  <project-components>
+    <component>
+      <implementation-class>
+        com.google.googlejavaformat.intellij.GoogleJavaFormatInstaller
+      </implementation-class>
+      <loadForDefaultProject/>
+    </component>
+    <component>
+      <implementation-class>
+        com.google.googlejavaformat.intellij.InitialConfigurationComponent
+      </implementation-class>
+    </component>
+  </project-components>
+  <extensions defaultExtensionNs="com.intellij">
+    <projectConfigurable instance="com.google.googlejavaformat.intellij.GoogleJavaFormatConfigurable" id="google-java-format.settings" displayName="google-java-format Settings"/>
+    <projectService serviceImplementation="com.google.googlejavaformat.intellij.GoogleJavaFormatSettings"/>
+  </extensions>
+</idea-plugin>
